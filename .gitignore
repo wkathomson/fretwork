@@ -1,0 +1,6 @@
+# Local preview / build artefacts (not needed by the app)
+serve.js
+fonts-block.css
+.claude/
+guitar-app-build-brief.md
+.DS_Store
