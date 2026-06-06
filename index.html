@@ -214,6 +214,9 @@ nav#tabs button.active{color:var(--accent)}
 .lyr{white-space:pre}
 .song-section{font-weight:800;color:var(--accent-2);margin:16px 0 6px;font-size:.78rem;text-transform:uppercase;letter-spacing:.08em;font-family:"Baloo 2",ui-rounded,sans-serif}
 .song-blank{height:.7em}
+.song-search{display:flex;gap:8px;align-items:center}
+.song-search input{flex:1;height:46px;background:var(--bg2);color:var(--ink);border:1px solid var(--line);border-radius:12px;padding:0 12px;font:inherit;font-size:.95rem}
+.song-search .btn{white-space:nowrap}
 
 /* Chord zoom modal */
 .zoom-card{display:flex;flex-direction:column;align-items:center;gap:6px}
@@ -1422,6 +1425,41 @@ I'm going to Louisiana, my [D7]true love for to [G]see
 #Chorus
 Oh [C]Susanna, [G]don't you cry for [D7]me
 For I [G]come from [C]Alabama with my [G]banjo [D7]on my [G]knee` },
+ { id:"saints", title:"When the Saints Go Marching In", by:"Traditional", key:"G", capo:0,
+   note:"An upbeat gospel singalong – three easy chords.",
+   body:`#Verse
+Oh when the [G]saints go marching [G7]in
+Oh when the [C]saints go [G]marching in
+Oh how I [G]want to be in that [D7]number
+When the [G]saints go [D7]marching [G]in` },
+ { id:"swing-low", title:"Swing Low, Sweet Chariot", by:"Traditional", key:"G", capo:0,
+   note:"A slow, soulful spiritual.",
+   body:`#Chorus
+[G]Swing low, sweet [C]chari-[G]ot
+Coming for to carry me [D7]home
+[G]Swing low, sweet [C]chari-[G]ot
+Coming for to [D7]carry me [G]home` },
+ { id:"this-light", title:"This Little Light of Mine", by:"Traditional", key:"G", capo:0,
+   note:"A joyful, repetitive tune – great for locking in changes.",
+   body:`#Verse
+This little [G]light of mine, I'm gonna let it [C]shine
+This little light of [G]mine, I'm gonna let it [D7]shine
+This little light of [G]mine, I'm gonna let it [C]shine
+Let it [G]shine, let it [D7]shine, let it [G]shine` },
+ { id:"circle", title:"Will the Circle Be Unbroken", by:"Traditional", key:"G", capo:0,
+   note:"A timeless country-gospel standard.",
+   body:`#Chorus
+Will the [G]circle be un-[C]broken
+[G]By and by, Lord, [D]by and by
+There's a [G]better home a-[C]waiting
+[G]In the sky, Lord, [D]in the [G]sky` },
+ { id:"greensleeves", title:"Greensleeves", by:"Traditional", key:"Am", capo:0,
+   note:"A beautiful old English ballad in a minor key.",
+   body:`#Verse
+A-[Am]las, my [G]love, you [Am]do me [E]wrong
+To [Am]cast me [G]off dis-[E]courteously
+And [Am]I have [G]loved you [Am]oh so [E]long
+De-[Am]lighting [G]in your [E]compa-[Am]ny` },
 ];
 function getSong(id){ return SONGS.find(s=>s.id===id) || (STATE.songs||[]).find(s=>s.id===id); }
 let songState={ current:null, transpose:0, scrolling:false, speed:2, raf:null };
@@ -1517,10 +1555,20 @@ function renderSongs(){
   v.appendChild(el("div","group-title","Songbook"));
   SONGS.forEach(s=> v.appendChild(mk(s,false)));
 
-  const imp=el("button","btn ghost block","＋ Import a song");
-  imp.style.marginTop="14px";
+  v.appendChild(el("div","group-title","More songs"));
+  const imp=el("button","btn ghost block","＋ Import your own (paste chords)");
   imp.onclick=openImportSong;
   v.appendChild(imp);
+
+  // Songsterr search – opens their site for full interactive tabs
+  const ss=el("div","card"); ss.style.marginTop="12px";
+  ss.innerHTML=`<h3>Find any other song</h3>
+    <p class="hint">Search Songsterr for full interactive tabs. Opens in your browser.</p>
+    <div class="song-search"><input id="ssQuery" placeholder="Song or artist…"><button class="btn" id="ssGo">Search →</button></div>`;
+  v.appendChild(ss);
+  const go=()=>{ const q=ss.querySelector("#ssQuery").value.trim(); if(!q) return; window.open("https://www.songsterr.com/?pattern="+encodeURIComponent(q),"_blank","noopener"); };
+  ss.querySelector("#ssGo").onclick=go;
+  ss.querySelector("#ssQuery").addEventListener("keydown",e=>{ if(e.key==="Enter") go(); });
 }
 function renderSongDetail(v, song){
   if(!song){ songState.current=null; renderSongs(); return; }
