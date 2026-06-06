@@ -154,6 +154,21 @@ nav#tabs button.active{color:var(--accent)}
 .prog-tempo .hint{min-width:64px;font-weight:700}
 .prog-tempo input{flex:1}
 
+/* Streak + practice games */
+.streak-card{display:flex;align-items:center;justify-content:space-between;gap:12px;background:linear-gradient(110deg,var(--panel2),var(--panel));border:1px solid var(--line);border-radius:16px;padding:14px 16px;margin:0 0 12px;box-shadow:var(--shadow)}
+.streak-big{font-family:"Baloo 2",ui-rounded,sans-serif;font-weight:800;font-size:1.25rem}
+.streak-big b{color:var(--accent);font-size:1.5rem}
+.streak-sub{font-size:.8rem;color:var(--ink-dim);text-align:right;flex:1}
+.choice-row{display:grid;grid-template-columns:repeat(2,1fr);gap:10px;margin-top:12px}
+.btn.choice{padding:14px;font-size:1rem}
+.choice:disabled{opacity:1}
+.choice.right{background:var(--good)!important;color:#fff!important;border-color:var(--good)!important}
+.choice.wrong{background:#eee;color:var(--ink-dim);border-color:var(--line)}
+.quiz-fb{min-height:1.5em;text-align:center;margin-top:10px;font-weight:700}
+.quiz-fb .ok{color:var(--good)}
+.quiz-fb .no{color:var(--accent)}
+#noteCard svg,#earCard svg{display:block;margin:4px auto;max-width:340px}
+
 /* Chord zoom modal */
 .zoom-card{display:flex;flex-direction:column;align-items:center;gap:6px}
 .zoom-card svg{width:100%;max-width:300px;height:auto}
@@ -332,7 +347,7 @@ textarea.io{width:100%;min-height:120px;background:var(--bg2);color:var(--ink);b
  * 0.  Persistence
  * ============================================================= */
 const STORE_KEY = "fretwork.v1";
-const DEFAULT_STATE = { completed:{}, progression:[], settings:{ volume:0.8, bpm:80, sig:4 } };
+const DEFAULT_STATE = { completed:{}, progression:[], practice:{dates:{},streak:0,best:0}, settings:{ volume:0.8, bpm:80, sig:4 } };
 function loadState(){
   try{ const r = JSON.parse(localStorage.getItem(STORE_KEY)); if(r&&typeof r==="object")
     return Object.assign({}, DEFAULT_STATE, r, {settings:Object.assign({},DEFAULT_STATE.settings,r.settings)});
@@ -343,6 +358,19 @@ let STATE = loadState();
 let saveTimer=null;
 function saveState(){ clearTimeout(saveTimer); saveTimer=setTimeout(()=>{
   try{ localStorage.setItem(STORE_KEY, JSON.stringify(STATE)); }catch(e){} },120); }
+
+// ---- Practice streak ----------------------------------------------------
+function dateStr(d){ return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`; }
+function markPractice(){
+  if(!STATE.practice) STATE.practice={dates:{},streak:0,best:0};
+  const t=dateStr(new Date());
+  STATE.practice.dates[t]=1;
+  let s=0, d=new Date();
+  while(STATE.practice.dates[dateStr(d)]){ s++; d.setDate(d.getDate()-1); }
+  STATE.practice.streak=s;
+  STATE.practice.best=Math.max(STATE.practice.best||0, s);
+  saveState();
+}
 
 /* =============================================================
  * 1.  Audio – note→frequency + Karplus-Strong pluck
@@ -949,7 +977,8 @@ function renderChords(){
 }
 
 /* ---- Progression builder ---------------------------------------------- */
-let progState={ playing:false, idx:0, loop:true, beats:4, bpm:80, timer:null };
+let progState={ playing:false, idx:0, loop:true, beats:4, bpm:80, click:false, countIn:true, timer:null };
+function progClicks(){ if(!progState.click) return; const ctx=audio(), bd=60/progState.bpm; for(let b=0;b<progState.beats;b++) metroClick(ctx.currentTime+b*bd, b===0); }
 function progItems(){ return STATE.progression || (STATE.progression=[]); }
 function addToProgression(name){ progItems().push(name); saveState(); renderProgPanel(); toast(name+" added"); }
 function removeFromProg(i){ progItems().splice(i,1); if(progState.idx>=progItems().length) progState.idx=0; saveState(); renderProgPanel(); }
@@ -958,7 +987,12 @@ function loadPreset(arr){ stopProg(); STATE.progression=arr.slice(); saveState()
 function progStepMs(){ return (60/progState.bpm)*progState.beats*1000; }
 function playProg(){
   const items=progItems(); if(!items.length) return;
-  audio(); progState.playing=true; progState.idx=0; updateProgPlayBtn(); stepProg();
+  audio(); progState.playing=true; progState.idx=0; updateProgPlayBtn();
+  if(progState.click && progState.countIn){          // one bar count-in
+    const ctx=audio(), bd=60/progState.bpm;
+    for(let b=0;b<progState.beats;b++) metroClick(ctx.currentTime+b*bd, b===0);
+    progState.timer=setTimeout(stepProg, bd*progState.beats*1000);
+  } else stepProg();
 }
 function stepProg(){
   if(!progState.playing) return;
@@ -967,6 +1001,7 @@ function stepProg(){
   const ch=CHORD_BY_NAME[items[progState.idx]];
   const card=document.querySelector(`#progPanel .prog-item[data-i="${progState.idx}"]`);
   if(ch) playChord(ch, card);
+  progClicks();
   highlightProg(progState.idx);
   progState.idx++;
   progState.timer=setTimeout(stepProg, progStepMs());
@@ -999,6 +1034,7 @@ function renderProgPanel(){
       <div class="prog-controls">
         <button class="btn" id="progPlay">▶ Play</button>
         <button class="pill ${progState.loop?'active':''}" id="progLoop">↻ Loop</button>
+        <button class="pill ${progState.click?'active':''}" id="progClick">🥁 Click</button>
         <div class="seg">
           <button data-beats="2" class="${progState.beats===2?'on':''}">2 beats</button>
           <button data-beats="4" class="${progState.beats===4?'on':''}">4 beats</button>
@@ -1013,6 +1049,7 @@ function renderProgPanel(){
   panel.querySelectorAll(".prog-item").forEach(it=> it.onclick=()=> openChordZoom(CHORD_BY_NAME[items[+it.dataset.i]]));
   const play=panel.querySelector("#progPlay"); if(play) play.onclick=()=>{ progState.playing? stopProg() : playProg(); };
   const loop=panel.querySelector("#progLoop"); if(loop) loop.onclick=()=>{ progState.loop=!progState.loop; renderProgPanel(); };
+  const click=panel.querySelector("#progClick"); if(click) click.onclick=()=>{ progState.click=!progState.click; renderProgPanel(); };
   panel.querySelectorAll("[data-beats]").forEach(b=> b.onclick=()=>{ progState.beats=+b.dataset.beats; renderProgPanel(); });
   const bpm=panel.querySelector("#progBpm"); if(bpm) bpm.oninput=e=>{ progState.bpm=+e.target.value; const l=panel.querySelector("#progBpmLbl"); if(l) l.textContent=progState.bpm+" BPM"; };
   const clr=panel.querySelector("#progClear"); if(clr) clr.onclick=clearProg;
@@ -1179,10 +1216,123 @@ function tapTempo(){
     setBpm(60000/(sum/(taps.length-1)));
   }
 }
+/* ---- Drum grooves (synthesised, no audio files) ----------------------- */
+function noiseBurst(t,dur,vol,hp){
+  const ctx=audio(),sr=ctx.sampleRate,n=Math.max(1,Math.ceil(sr*dur));
+  const buf=ctx.createBuffer(1,n,sr),d=buf.getChannelData(0);
+  for(let i=0;i<n;i++) d[i]=Math.random()*2-1;
+  const src=ctx.createBufferSource();src.buffer=buf;
+  const g=ctx.createGain();g.gain.setValueAtTime(vol,t);g.gain.exponentialRampToValueAtTime(0.0008,t+dur);
+  const f=ctx.createBiquadFilter();f.type="highpass";f.frequency.value=hp||3000;
+  src.connect(f);f.connect(g);g.connect(master);src.start(t);src.stop(t+dur+0.02);
+}
+function dKick(t){ const ctx=audio(),o=ctx.createOscillator(),g=ctx.createGain();
+  o.frequency.setValueAtTime(155,t);o.frequency.exponentialRampToValueAtTime(48,t+0.13);
+  g.gain.setValueAtTime(1,t);g.gain.exponentialRampToValueAtTime(0.001,t+0.17);
+  o.connect(g);g.connect(master);o.start(t);o.stop(t+0.19); }
+function dSnare(t){ noiseBurst(t,0.14,0.5,1800); const ctx=audio(),o=ctx.createOscillator(),g=ctx.createGain();
+  o.type="triangle";o.frequency.value=190;g.gain.setValueAtTime(0.35,t);g.gain.exponentialRampToValueAtTime(0.001,t+0.09);
+  o.connect(g);g.connect(master);o.start(t);o.stop(t+0.1); }
+function dHat(t){ noiseBurst(t,0.035,0.2,8000); }
+const GROOVES={
+  rock:{name:"Rock",steps:16,k:[0,8],s:[4,12],h:[0,2,4,6,8,10,12,14]},
+  folk:{name:"Folk",steps:16,k:[0,8,11],s:[4,12],h:[0,2,4,6,8,10,12,14]},
+  pop:{name:"Pop",steps:16,k:[0,6,8,10],s:[4,12],h:[0,2,4,6,8,10,12,14]},
+  waltz:{name:"Waltz",steps:12,k:[0],s:[4,8],h:[0,2,4,6,8,10]},
+};
+const drum={running:false,bpm:90,pat:"rock",step:0,nextTime:0,timer:null};
+function drumStepDur(){ return (60/drum.bpm)/4; }
+function drumSchedule(){
+  const ctx=audio();
+  while(drum.nextTime < ctx.currentTime+0.12){
+    const g=GROOVES[drum.pat], st=drum.step % g.steps;
+    if(g.k.includes(st)) dKick(drum.nextTime);
+    if(g.s.includes(st)) dSnare(drum.nextTime);
+    if(g.h.includes(st)) dHat(drum.nextTime);
+    drum.nextTime+=drumStepDur(); drum.step++;
+  }
+}
+function drumLoop(){ drumSchedule(); drum.timer=setTimeout(drumLoop,25); }
+function drumStart(){ audio(); drum.running=true; drum.step=0; drum.nextTime=audio().currentTime+0.06; drumLoop(); }
+function drumStop(){ drum.running=false; clearTimeout(drum.timer); }
+
+/* ---- Practice games --------------------------------------------------- */
+function rand(n){ return Math.floor(Math.random()*n); }
+function renderNoteSpot(sp){
+  const nS=6,sGap=20,fGap=30,mL=26,mT=12,mB=18,frets=12;
+  const boardW=frets*fGap,boardH=(nS-1)*sGap,W=mL+boardW+16,H=mT+boardH+mB;
+  const xF=f=>mL+f*fGap, yS=s=>mT+(nS-1-s)*sGap;
+  let s=`<svg class="diagram-svg" viewBox="0 0 ${W} ${H}">`;
+  const names=["E","A","D","G","B","E"];
+  for(let i=0;i<nS;i++) s+=`<text class="scale-strlabel" x="8" y="${yS(i)+4}">${names[i]}</text>`;
+  [3,5,7,9,12].forEach(f=>{ s+=`<circle cx="${xF(f)-fGap/2}" cy="${(yS(2)+yS(3))/2}" r="2.6" fill="var(--line)"/>`; });
+  for(let i=0;i<nS;i++) s+=`<line x1="${mL}" y1="${yS(i)}" x2="${mL+boardW}" y2="${yS(i)}" stroke="var(--line)" stroke-width="${1+i*0.16}"/>`;
+  for(let f=0;f<=frets;f++) s+=`<line x1="${xF(f)}" y1="${mT}" x2="${xF(f)}" y2="${mT+boardH}" stroke="${f===0?'var(--ink-dim)':'var(--line)'}" stroke-width="${f===0?3:1.2}"/>`;
+  for(let f=1;f<=frets;f++) s+=`<text x="${xF(f)-fGap/2}" y="${mT+boardH+13}" fill="var(--ink-faint)" font-size="9" text-anchor="middle">${f}</text>`;
+  const x= sp.f===0? xF(0)-11 : xF(sp.f)-fGap/2, y=yS(sp.s);
+  s+=`<circle cx="${x}" cy="${y}" r="10" fill="var(--wood)" stroke="#fff" stroke-width="1.6"/><text x="${x}" y="${y+4}" fill="#fff" font-size="13" font-weight="800" text-anchor="middle">?</text>`;
+  return s+`</svg>`;
+}
+let noteTrainer={spot:null,choices:[],score:0,total:0};
+function newNoteQ(){
+  const s=rand(6), f=rand(13), pc=fretMidi(s,f)%12;
+  noteTrainer.spot={s,f,pc};
+  const set=new Set([pcName(pc)]);
+  while(set.size<4) set.add(NOTE_NAMES[rand(12)]);
+  noteTrainer.choices=[...set].sort(()=>Math.random()-0.5);
+}
+function renderNoteTrainer(){
+  const c=document.getElementById("noteCard"); if(!c) return;
+  if(!noteTrainer.spot) newNoteQ();
+  c.innerHTML=`<h3>Name that note</h3>
+    <p class="hint">Which note is the highlighted dot? Score: <b>${noteTrainer.score}/${noteTrainer.total}</b></p>
+    ${renderNoteSpot(noteTrainer.spot)}
+    <div class="choice-row">${noteTrainer.choices.map(n=>`<button class="btn ghost choice" data-n="${n}">${n}</button>`).join("")}</div>
+    <div class="quiz-fb" id="ntFb"></div>`;
+  c.querySelectorAll(".choice").forEach(b=> b.onclick=()=> answerNote(b.dataset.n));
+}
+function answerNote(n){
+  const sp=noteTrainer.spot, correct=pcName(sp.pc);
+  noteTrainer.total++;
+  pluck(midiToFreq(fretMidi(sp.s,sp.f)),1.2);
+  if(n===correct) noteTrainer.score++;
+  const fb=document.getElementById("ntFb");
+  fb.innerHTML = n===correct? `<span class="ok">✓ ${correct}</span>` : `<span class="no">✗ that was ${correct}</span>`;
+  document.querySelectorAll("#noteCard .choice").forEach(b=>{ b.disabled=true; if(b.dataset.n===correct)b.classList.add("right"); else if(b.dataset.n===n)b.classList.add("wrong"); });
+  setTimeout(()=>{ noteTrainer.spot=null; renderNoteTrainer(); }, 1100);
+}
+let earT={current:null,score:0,total:0};
+const EAR_ROOTS=["E","A","D"];
+function nextEarQ(){ const r=EAR_ROOTS[rand(3)], minor=Math.random()<0.5; earT.current={name:r+(minor?"m":""),q:minor?"minor":"major"}; }
+function renderEarTrainer(){
+  const c=document.getElementById("earCard"); if(!c) return;
+  if(!earT.current) nextEarQ();
+  c.innerHTML=`<h3>Major or minor?</h3>
+    <p class="hint">Play the chord, then decide how it feels. Score: <b>${earT.score}/${earT.total}</b></p>
+    <button class="btn block ghost" id="earPlay">▶ Play chord</button>
+    <div class="choice-row" style="margin-top:10px">
+      <button class="btn choice" data-q="major">Major</button>
+      <button class="btn choice" data-q="minor">Minor</button>
+    </div>
+    <div class="quiz-fb" id="earFb"></div>`;
+  document.getElementById("earPlay").onclick=()=> playChord(CHORD_BY_NAME[earT.current.name]);
+  c.querySelectorAll(".choice").forEach(b=> b.onclick=()=> answerEar(b.dataset.q));
+}
+function answerEar(q){
+  if(!earT.current) return;
+  earT.total++;
+  const cur=earT.current, ok=q===cur.q;
+  if(ok) earT.score++;
+  const fb=document.getElementById("earFb");
+  fb.innerHTML = ok? `<span class="ok">✓ ${cur.name} is ${cur.q}</span>` : `<span class="no">✗ that was ${cur.name} (${cur.q})</span>`;
+  document.querySelectorAll("#earCard .choice").forEach(b=>{ b.disabled=true; if(b.dataset.q===cur.q)b.classList.add("right"); else if(b.dataset.q===q)b.classList.add("wrong"); });
+  setTimeout(()=>{ nextEarQ(); renderEarTrainer(); playChord(CHORD_BY_NAME[earT.current.name]); }, 1300);
+}
+
 function renderTools(){
   const v=$("#view-tools");
   v.innerHTML="";
-  v.appendChild(el("p","section-intro","Keep time and find tempos. The metronome uses Web Audio scheduling for rock-solid timing."));
+  v.appendChild(el("p","section-intro","Practise with rock-solid timing, jam over a beat, and sharpen your ear and fretboard knowledge."));
 
   const m=el("div","card");
   m.innerHTML=`<h3>Metronome</h3>
@@ -1205,6 +1355,19 @@ function renderTools(){
     <button class="btn block ghost" id="tapBtn" style="padding:22px;font-size:1.1rem">Tap</button>`;
   v.appendChild(tap);
 
+  // groove / drums
+  const groove=el("div","card");
+  groove.innerHTML=`<h3>Groove – jam-along drums</h3>
+    <p class="hint">A simple beat to play your chords and scales over. Loops until you stop.</p>
+    <div class="pill-row">${Object.keys(GROOVES).map(k=>`<button class="pill ${drum.pat===k?'active':''}" data-groove="${k}">${GROOVES[k].name}</button>`).join("")}</div>
+    <div class="prog-tempo"><span class="hint" id="drumBpmLbl">${drum.bpm} BPM</span><input type="range" id="drumBpm" class="slider" min="50" max="200" value="${drum.bpm}"></div>
+    <button class="btn block" id="drumToggle" style="margin-top:8px">${drum.running?'■ Stop':'▶ Start'}</button>`;
+  v.appendChild(groove);
+
+  // practice games
+  const note=el("div","card"); note.id="noteCard"; v.appendChild(note);
+  const ear=el("div","card"); ear.id="earCard"; v.appendChild(ear);
+
   // build beats
   const row=$("#beatRow");
   for(let i=0;i<metro.sig;i++){ const b=el("div","beat"+(i===0?" accent":"")); row.appendChild(b); }
@@ -1214,6 +1377,13 @@ function renderTools(){
   m.querySelectorAll("[data-sig]").forEach(b=> b.onclick=()=>{ metro.sig=+b.dataset.sig; STATE.settings.sig=metro.sig; saveState(); renderTools(); });
   $("#metroToggle").onclick=function(){ if(metro.running){ metroStop(); this.textContent="Start"; } else { metroStart(); this.textContent="Stop"; } };
   $("#tapBtn").onclick=tapTempo;
+
+  groove.querySelectorAll("[data-groove]").forEach(b=> b.onclick=()=>{ drum.pat=b.dataset.groove; groove.querySelectorAll("[data-groove]").forEach(x=>x.classList.toggle("active",x.dataset.groove===drum.pat)); });
+  groove.querySelector("#drumBpm").oninput=e=>{ drum.bpm=+e.target.value; groove.querySelector("#drumBpmLbl").textContent=drum.bpm+" BPM"; };
+  groove.querySelector("#drumToggle").onclick=function(){ if(drum.running){ drumStop(); this.textContent="▶ Start"; } else { drumStart(); this.textContent="■ Stop"; } };
+
+  renderNoteTrainer();
+  renderEarTrainer();
 }
 
 // ---- Curriculum ---------------------------------------------------------
@@ -1236,6 +1406,15 @@ function renderLearn(){
     <div class="ring wrap" style="--p:${op.pct};width:58px;height:58px;flex:0 0 58px"><span>${op.pct}%</span></div>
     <div><h3 style="margin:0">Your learning path</h3><div class="hint">${op.done} of ${op.total} lessons complete · three stages, twelve modules</div></div></div>`;
   v.appendChild(head);
+
+  // practice streak
+  const pr=STATE.practice||{streak:0,best:0};
+  const streak=el("div","streak-card");
+  const flames = pr.streak>0 ? "🔥" : "🌱";
+  streak.innerHTML=`<div class="streak-big">${flames} <b>${pr.streak}</b> day${pr.streak===1?"":"s"}</div>
+    <div class="streak-sub">${pr.streak>0?"You’ve practised today – keep it going!":"Open the app daily to build a streak"}${pr.best>1?` · best ${pr.best}`:""}</div>`;
+  v.appendChild(streak);
+
   v.appendChild(el("p","hint","Lessons unlock in order, but jump ahead any time if you’re curious."));
 
   let lastStage=null;
@@ -1418,6 +1597,7 @@ window.addEventListener("touchend",unlockOnce,{passive:true});
 window.addEventListener("mousedown",unlockOnce);
 
 // boot
+markPractice();
 switchTab("start");
 </script>
 </body>
