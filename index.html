@@ -169,6 +169,23 @@ nav#tabs button.active{color:var(--accent)}
 .quiz-fb .no{color:var(--accent)}
 #noteCard svg,#earCard svg{display:block;margin:4px auto;max-width:340px}
 
+/* Live tuner */
+.tuner-note{font-family:"Baloo 2",ui-rounded,sans-serif;font-weight:800;font-size:3.6rem;text-align:center;line-height:1;color:var(--ink);margin:8px 0 2px}
+.tuner-note span{font-size:1.4rem;color:var(--ink-dim);vertical-align:super;margin-left:2px}
+.tuner-note .dim{color:var(--ink-faint);font-size:2.6rem}
+.tuner-note.intune{color:var(--good)}
+.cents-meter{position:relative;height:30px;background:var(--panel2);border:1px solid var(--line);border-radius:999px;margin:8px 0 6px;overflow:hidden}
+.cents-meter .cz{position:absolute;left:42%;width:16%;top:0;bottom:0;background:rgba(63,174,107,.22)}
+.cents-meter .center-line{position:absolute;left:50%;top:3px;bottom:3px;width:2px;background:var(--ink-dim);transform:translateX(-1px)}
+.cents-meter .needle{position:absolute;top:2px;bottom:2px;width:5px;border-radius:3px;background:var(--accent);transform:translateX(-2.5px);transition:left .08s linear,background .1s}
+.tuner-label{text-align:center;font-weight:700;color:var(--ink-dim);min-height:1.4em}
+.tuner-strings{display:grid;grid-template-columns:repeat(6,1fr);gap:6px;margin-top:12px}
+.tstr{display:flex;flex-direction:column;align-items:center;gap:1px;padding:9px 2px;border:1.5px solid var(--line);border-radius:10px;font-weight:800;color:var(--ink-dim);background:var(--panel)}
+.tstr small{font-weight:600;font-size:.6rem;color:var(--ink-faint)}
+.tstr.near{border-color:var(--accent);color:var(--accent)}
+.tstr.intune{background:var(--good);border-color:var(--good);color:#fff}
+.tstr.intune small{color:#fff}
+
 /* Chord zoom modal */
 .zoom-card{display:flex;flex-direction:column;align-items:center;gap:6px}
 .zoom-card svg{width:100%;max-width:300px;height:auto}
@@ -922,6 +939,10 @@ function renderStart(){
     tune.appendChild(b);
   });
   tune.appendChild(el("div","note-banner","Relative tuning by ear: the 5th fret of one string matches the next open string up – except the G string, where the 4th fret gives B."));
+  const tunerLink=el("button","btn ghost block","🎤 Use the live tuner (microphone)");
+  tunerLink.style.marginTop="4px";
+  tunerLink.onclick=()=> switchTab("tools");
+  tune.appendChild(tunerLink);
   v.appendChild(tune);
 
   // Posture + technique quick refs
@@ -1329,10 +1350,118 @@ function answerEar(q){
   setTimeout(()=>{ nextEarQ(); renderEarTrainer(); playChord(CHORD_BY_NAME[earT.current.name]); }, 1300);
 }
 
+/* ---- Live tuner (microphone + autocorrelation pitch detection) -------- */
+const tuner={running:false,stream:null,analyser:null,buf:null,raf:null,last:0,error:null,smooth:0};
+function autoCorrelate(buf, sampleRate){
+  let SIZE=buf.length, rms=0;
+  for(let i=0;i<SIZE;i++){ const v=buf[i]; rms+=v*v; }
+  rms=Math.sqrt(rms/SIZE);
+  if(rms<0.01) return -1;                         // too quiet
+  let r1=0,r2=SIZE-1; const thres=0.2;
+  for(let i=0;i<SIZE/2;i++) if(Math.abs(buf[i])<thres){ r1=i; break; }
+  for(let i=1;i<SIZE/2;i++) if(Math.abs(buf[SIZE-i])<thres){ r2=SIZE-i; break; }
+  const b=buf.slice(r1,r2); SIZE=b.length;
+  if(SIZE<2) return -1;
+  const c=new Array(SIZE).fill(0);
+  for(let i=0;i<SIZE;i++) for(let j=0;j<SIZE-i;j++) c[i]+=b[j]*b[j+i];
+  let d=0; while(d<SIZE-1 && c[d]>c[d+1]) d++;
+  let maxval=-1,maxpos=-1;
+  for(let i=d;i<SIZE;i++){ if(c[i]>maxval){ maxval=c[i]; maxpos=i; } }
+  let T0=maxpos;
+  if(T0<=0||T0>=SIZE-1) return -1;
+  const x1=c[T0-1],x2=c[T0],x3=c[T0+1], a=(x1+x3-2*x2)/2, bb=(x3-x1)/2;
+  if(a) T0=T0-bb/(2*a);
+  return sampleRate/T0;
+}
+function freqToNote(freq){
+  const det = 69 + 12*Math.log2(freq/440);        // continuous MIDI
+  const round=Math.round(det);
+  return { det, midi:round, cents:Math.round((det-round)*100),
+    name:NOTE_NAMES[((round%12)+12)%12], octave:Math.floor(round/12)-1 };
+}
+async function tunerStart(){
+  tuner.error=null;
+  if(!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia){ tuner.error="no-mic"; renderTuner(); return; }
+  try{
+    const stream=await navigator.mediaDevices.getUserMedia({audio:{echoCancellation:false,autoGainControl:false,noiseSuppression:false}});
+    tuner.stream=stream;
+    const ctx=audio();
+    const src=ctx.createMediaStreamSource(stream);
+    const an=ctx.createAnalyser(); an.fftSize=2048;
+    src.connect(an);                                // not connected to output – no feedback
+    tuner.analyser=an; tuner.buf=new Float32Array(an.fftSize); tuner.running=true; tuner.smooth=0;
+    renderTuner(); tunerLoop();
+  }catch(e){ tuner.error=e.name||"err"; renderTuner(); }
+}
+function tunerStop(){
+  tuner.running=false;
+  if(tuner.raf) cancelAnimationFrame(tuner.raf);
+  if(tuner.stream){ tuner.stream.getTracks().forEach(t=>t.stop()); tuner.stream=null; }
+  tuner.analyser=null;
+  if(document.getElementById("tunerCard")) renderTuner();
+}
+function tunerLoop(){
+  if(!tuner.running) return;
+  const now=performance.now();
+  if(now-tuner.last>55){
+    tuner.last=now;
+    tuner.analyser.getFloatTimeDomainData(tuner.buf);
+    updateTunerDisplay(autoCorrelate(tuner.buf, audio().sampleRate));
+  }
+  tuner.raf=requestAnimationFrame(tunerLoop);
+}
+function updateTunerDisplay(freq){
+  const nEl=$("#tNote"), needle=$("#tNeedle"), lab=$("#tLabel"); if(!nEl) return;
+  if(freq<0 || !isFinite(freq) || freq<55 || freq>1500){
+    nEl.innerHTML='<span class="dim">…</span>'; nEl.className="tuner-note";
+    lab.textContent="Play a single open string"; lab.style.color="var(--ink-dim)";
+    if(needle) needle.style.left="50%";
+    document.querySelectorAll(".tstr").forEach(c=>c.classList.remove("near","intune"));
+    return;
+  }
+  const det = 69 + 12*Math.log2(freq/440);          // continuous MIDI
+  // guide toward the nearest open string (E A D G B E)
+  let best=0,bd=1e9; OPEN_MIDI.forEach((m,i)=>{ const d=Math.abs(m-det); if(d<bd){bd=d;best=i;} });
+  const cents=Math.max(-50,Math.min(50, Math.round((det-OPEN_MIDI[best])*100)));
+  tuner.smooth = tuner.smooth*0.6 + cents*0.4;
+  const sc=Math.max(-50,Math.min(50,tuner.smooth));
+  const inTune=Math.abs(cents)<5;
+  nEl.innerHTML=`${TUNING[best].name}<span>${TUNING[best].octave}</span>`;
+  nEl.className="tuner-note"+(inTune?" intune":"");
+  if(needle){ needle.style.left=(sc+50)+"%"; needle.style.background=inTune?"var(--good)":"var(--accent)"; }
+  lab.textContent = inTune? "In tune ✓" : (cents<0? `${-cents}¢ flat – tune up` : `${cents}¢ sharp – tune down`);
+  lab.style.color = inTune? "var(--good)" : "var(--ink-dim)";
+  document.querySelectorAll(".tstr").forEach((chip,i)=>{
+    chip.classList.toggle("near", i===best);
+    chip.classList.toggle("intune", i===best && inTune);
+  });
+}
+function renderTuner(){
+  const c=document.getElementById("tunerCard"); if(!c) return;
+  if(!tuner.running){
+    const msg = tuner.error==="no-mic" ? "This browser can’t access a microphone."
+      : tuner.error ? "Microphone blocked. Allow mic access in your browser settings and try again."
+      : "Allow microphone access, then play one open string at a time.";
+    c.innerHTML=`<h3>Live tuner</h3><p class="hint">${msg}</p>
+      <button class="btn block" id="tunerStartBtn">🎤 Start tuner</button>`;
+    c.querySelector("#tunerStartBtn").onclick=tunerStart;
+    return;
+  }
+  c.innerHTML=`<h3>Live tuner</h3>
+    <div class="tuner-note" id="tNote"><span class="dim">…</span></div>
+    <div class="cents-meter"><div class="cz"></div><div class="center-line"></div><div class="needle" id="tNeedle" style="left:50%"></div></div>
+    <div class="tuner-label" id="tLabel">Play a single open string</div>
+    <div class="tuner-strings">${["E","A","D","G","B","E"].map((n,i)=>`<div class="tstr" data-i="${i}">${n}<small>${TUNING[i].name}${TUNING[i].octave}</small></div>`).join("")}</div>
+    <button class="btn block ghost" id="tunerStopBtn" style="margin-top:12px">Stop</button>`;
+  c.querySelector("#tunerStopBtn").onclick=tunerStop;
+}
+
 function renderTools(){
   const v=$("#view-tools");
   v.innerHTML="";
-  v.appendChild(el("p","section-intro","Practise with rock-solid timing, jam over a beat, and sharpen your ear and fretboard knowledge."));
+  v.appendChild(el("p","section-intro","Tune up, keep time, jam over a beat, and sharpen your ear and fretboard knowledge."));
+
+  const tcard=el("div","card"); tcard.id="tunerCard"; v.appendChild(tcard);
 
   const m=el("div","card");
   m.innerHTML=`<h3>Metronome</h3>
@@ -1382,6 +1511,7 @@ function renderTools(){
   groove.querySelector("#drumBpm").oninput=e=>{ drum.bpm=+e.target.value; groove.querySelector("#drumBpmLbl").textContent=drum.bpm+" BPM"; };
   groove.querySelector("#drumToggle").onclick=function(){ if(drum.running){ drumStop(); this.textContent="▶ Start"; } else { drumStart(); this.textContent="■ Stop"; } };
 
+  renderTuner();
   renderNoteTrainer();
   renderEarTrainer();
 }
@@ -1513,6 +1643,7 @@ const VIEW_IDS={start:"view-start",chords:"view-chords",scales:"view-scales",lea
 const RENDERERS={start:renderStart,chords:renderChords,scales:renderScales,learn:renderLearn,tools:renderTools};
 let activeTab="start";
 function switchTab(tab){
+  if(activeTab==="tools" && tab!=="tools" && typeof tunerStop==="function") tunerStop(); // release mic
   activeTab=tab;
   document.querySelectorAll(".view").forEach(v=>v.classList.remove("active"));
   $("#"+VIEW_IDS[tab]).classList.add("active");
