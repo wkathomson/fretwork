@@ -234,8 +234,10 @@ nav#tabs button.active{color:var(--accent)}
 /* Modal -------------------------------------------------------- */
 .modal-back{position:fixed;inset:0;background:rgba(0,0,0,.6);display:none;z-index:50;align-items:flex-end}
 .modal-back.open{display:flex}
-.modal{background:var(--panel);border-top-left-radius:20px;border-top-right-radius:20px;width:100%;max-height:88vh;overflow-y:auto;padding:18px 18px calc(28px + var(--safe-b));border-top:1px solid var(--line)}
+.modal{position:relative;background:var(--panel);border-top-left-radius:20px;border-top-right-radius:20px;width:100%;max-height:88vh;overflow-y:auto;padding:18px 18px calc(28px + var(--safe-b));border-top:1px solid var(--line)}
 .modal h3{margin-bottom:12px}
+.modal-x{position:sticky;top:0;float:right;margin:-4px -4px 0 0;width:38px;height:38px;border-radius:50%;background:var(--panel2);border:1px solid var(--line);color:var(--ink);font-size:1rem;display:grid;place-items:center;z-index:2}
+.modal-x:active{background:var(--wood);color:#fff;border-color:var(--wood)}
 textarea.io{width:100%;min-height:120px;background:var(--bg2);color:var(--ink);border:1px solid var(--line);border-radius:12px;padding:10px;font-family:ui-monospace,Menlo,monospace;font-size:.8rem}
 .field{margin:12px 0}
 .field label{display:block;font-size:.8rem;color:var(--ink-dim);margin-bottom:6px}
@@ -438,13 +440,13 @@ function renderChord(ch, opts={}){
   const nut=win.start===1;
   s+=`<line x1="${xS(0)}" y1="${mT}" x2="${xS(nS-1)}" y2="${mT}" stroke="var(--ink-dim)" stroke-width="${(nut?5:1.5)*u}" stroke-linecap="round"/>`;
   for(let r=1;r<=win.count;r++) s+=`<line x1="${xS(0)}" y1="${yF(r)}" x2="${xS(nS-1)}" y2="${yF(r)}" stroke="var(--line)" stroke-width="${1.5*u}"/>`;
-  for(let i=0;i<nS;i++) s+=`<line x1="${xS(i)}" y1="${mT}" x2="${xS(i)}" y2="${yF(win.count)}" stroke="var(--line)" stroke-width="${(1+ (5-i)*0.18)*u}"/>`;
+  for(let i=0;i<nS;i++) s+=`<line class="cstr" data-s="${i}" data-w="${(1+ (5-i)*0.18)*u}" x1="${xS(i)}" y1="${mT}" x2="${xS(i)}" y2="${yF(win.count)}" stroke="var(--line)" stroke-width="${(1+ (5-i)*0.18)*u}"/>`;
   // open / muted markers
   for(let i=0;i<nS;i++){
     const f=frets[i];
     const x=xS(i), y=mT-12*u;
     if(f==="x"||f==="X") s+=`<text x="${x}" y="${y+4*u}" fill="var(--ink-dim)" font-size="${markFs}" text-anchor="middle">✕</text>`;
-    else if(f===0) s+=`<circle cx="${x}" cy="${y}" r="${5.5*u}" fill="none" stroke="var(--ink-dim)" stroke-width="${1.6*u}"/>`;
+    else if(f===0) s+=`<circle class="cdot" data-s="${i}" data-r="${5.5*u}" cx="${x}" cy="${y}" r="${5.5*u}" fill="none" stroke="var(--ink-dim)" stroke-width="${1.6*u}"/>`;
   }
   // barres
   const drawn=new Set();
@@ -464,7 +466,7 @@ function renderChord(ch, opts={}){
     const f=frets[i];
     if(typeof f==="number" && f>0 && !drawn.has(i)){
       const row=f-win.start+1, x=xS(i), y=yF(row)-fGap/2;
-      s+=`<circle cx="${x}" cy="${y}" r="${dotR}" fill="var(--wood)" stroke="#fff" stroke-width="${1.2*u}"/>`;
+      s+=`<circle class="cdot" data-s="${i}" data-r="${dotR}" cx="${x}" cy="${y}" r="${dotR}" fill="var(--wood)" stroke="#fff" stroke-width="${1.2*u}"/>`;
       const fin=fingers[i];
       if(fin) s+=`<text x="${x}" y="${y+numFs*0.35}" fill="#fff" font-size="${numFs}" font-weight="800" text-anchor="middle">${fin}</text>`;
     }
@@ -532,15 +534,30 @@ function renderScale(def, rootPc, opts={}){
 }
 
 // ---- Playback -----------------------------------------------------------
-function playChord(ch){
+function playChord(ch, container){
   audio();
   let t=0;
+  const stagger=0.05; // slightly wider so the strum is visible as it lights up
   for(let i=0;i<6;i++){
     const f=ch.frets[i];
     if(f==="x"||f==="X") continue;
     pluck(midiToFreq(fretMidi(i, f===0?0:f)), 1.5, t, 0.95);
-    t+=0.035; // downward strum stagger
+    if(container) flashString(container, i, t);
+    t+=stagger; // downward strum stagger
   }
+}
+// light up a single string (line + its dot) as it is struck
+function flashString(container, i, delaySec){
+  const lines=container.querySelectorAll(`.cstr[data-s="${i}"]`);
+  const dots =container.querySelectorAll(`.cdot[data-s="${i}"]`);
+  setTimeout(()=>{
+    lines.forEach(l=>{ l.setAttribute("stroke","var(--wood)"); l.setAttribute("stroke-width", (parseFloat(l.dataset.w)+2.4)); });
+    dots.forEach(d=>{ d.setAttribute("r", +d.dataset.r+3); d.setAttribute("stroke","var(--wood-lite)"); });
+    setTimeout(()=>{
+      lines.forEach(l=>{ l.setAttribute("stroke","var(--line)"); l.setAttribute("stroke-width", l.dataset.w); });
+      dots.forEach(d=>{ d.setAttribute("r", d.dataset.r); d.setAttribute("stroke", d.getAttribute("fill")==="none"?"var(--ink-dim)":"#fff"); });
+    }, 190);
+  }, delaySec*1000);
 }
 // gather the scale notes shown in a window, ascending and de-duplicated by pitch
 function collectScaleNotes(def, rootPc, win){
@@ -619,6 +636,28 @@ const CHORDS = [
   {name:"Fm (E-shape)",realName:"Fm", group:"Barre – movable", movable:"E-shape minor", frets:[1,3,3,1,1,1], fingers:[1,3,4,1,1,1], sub:"Minor barre, root on low E"},
   {name:"B♭ (A-shape)",realName:"B♭", group:"Barre – movable", movable:"A-shape major", frets:["x",1,3,3,3,1], fingers:[0,1,2,3,4,1], sub:"Major barre, root on A"},
   {name:"B♭m (A-shape)",realName:"B♭m", group:"Barre – movable", movable:"A-shape minor", frets:["x",1,3,3,2,1], fingers:[0,1,3,4,2,1], sub:"Minor barre, root on A"},
+  // Suspended & add – colour chords, neither major nor minor
+  {name:"Dsus2", group:"Suspended & add", frets:["x","x",0,2,3,0], fingers:[0,0,0,1,3,0], sub:"Open and airy"},
+  {name:"Dsus4", group:"Suspended & add", frets:["x","x",0,2,3,3], fingers:[0,0,0,1,3,4], sub:"Tension that resolves to D"},
+  {name:"Asus2", group:"Suspended & add", frets:["x",0,2,2,0,0], fingers:[0,0,1,2,0,0], sub:"Lift one finger off A"},
+  {name:"Asus4", group:"Suspended & add", frets:["x",0,2,2,3,0], fingers:[0,0,1,2,3,0], sub:"Add a finger to A"},
+  {name:"Esus4", group:"Suspended & add", frets:[0,2,2,2,0,0], fingers:[0,1,2,3,0,0], sub:"Suspended E"},
+  {name:"Cadd9", group:"Suspended & add", frets:["x",3,2,0,3,0], fingers:[0,2,1,0,3,0], sub:"Sparkly – pairs with G"},
+  // Major 7ths – soft, jazzy, dreamy
+  {name:"Cmaj7", group:"Major 7ths", frets:["x",3,2,0,0,0], fingers:[0,3,2,0,0,0], sub:"Mellow and dreamy"},
+  {name:"Amaj7", group:"Major 7ths", frets:["x",0,2,1,2,0], fingers:[0,0,2,1,3,0], sub:"Lush open A"},
+  {name:"Dmaj7", group:"Major 7ths", frets:["x","x",0,2,2,2], fingers:[0,0,0,1,2,3], sub:"Bright and floaty"},
+  {name:"Gmaj7", group:"Major 7ths", frets:[3,2,0,0,0,2], fingers:[3,2,0,0,0,1], sub:"Warm open G7-maj"},
+  {name:"Emaj7", group:"Major 7ths", frets:[0,2,1,1,0,0], fingers:[0,3,1,2,0,0], sub:"Smooth E colour"},
+  // Slash chords – a chord over a different bass note
+  {name:"G/B", group:"Slash chords", frets:["x",2,0,0,0,3], fingers:[0,1,0,0,0,2], sub:"G with a B in the bass"},
+  {name:"C/G", group:"Slash chords", frets:[3,3,2,0,1,0], fingers:[3,4,2,0,1,0], sub:"C with a deep G bass"},
+  {name:"D/F♯",realName:"D/F#", group:"Slash chords", frets:[2,0,0,2,3,2], fingers:[1,0,0,2,3,4], sub:"Bass walks E–F♯–G"},
+  // Power chords – just root + fifth, movable, the engine of rock
+  {name:"E5", group:"Power chords", frets:[0,2,2,"x","x","x"], fingers:[0,1,2,0,0,0], sub:"Root + fifth, no third"},
+  {name:"A5", group:"Power chords", frets:["x",0,2,2,"x","x"], fingers:[0,0,1,2,0,0], sub:"Movable shape"},
+  {name:"D5", group:"Power chords", frets:["x","x",0,2,3,"x"], fingers:[0,0,0,1,3,0], sub:"Bright power chord"},
+  {name:"G5", group:"Power chords", frets:[3,5,5,"x","x","x"], fingers:[1,3,4,0,0,0], sub:"Movable, root on 6th string"},
 ];
 const CHORD_BY_NAME = {};
 CHORDS.forEach(c=> CHORD_BY_NAME[c.name]= c);
@@ -890,8 +929,6 @@ function renderChords(){
   // progression focus panel (built/refreshed by renderProgPanel)
   const panel=el("div","prog-panel"); panel.id="progPanel"; v.appendChild(panel);
 
-  v.appendChild(el("div","tip","Diagrams are vertical – the standard format. Picture standing the guitar up and looking at the front: the lines are the six strings (low E on the left), and numbered dots show which finger presses where."));
-
   const groups=[...new Set(CHORDS.map(c=>c.group))];
   groups.forEach(g=>{
     v.appendChild(el("div","group-title",g));
@@ -902,7 +939,7 @@ function renderChords(){
       const chip=el("div","chip");
       chip.innerHTML=`<button class="chip-add" aria-label="Add ${c.name} to progression">＋</button><button class="chip-play" aria-label="Play ${c.name}">▶</button><div class="name">${c.name}</div>${renderChord(c)}<div class="sub">${c.sub||""}</div>`;
       chip.onclick=()=> openChordZoom(c);
-      chip.querySelector(".chip-play").onclick=e=>{ e.stopPropagation(); playChord(c); flash(chip); };
+      chip.querySelector(".chip-play").onclick=e=>{ e.stopPropagation(); playChord(c, chip); flash(chip); };
       chip.querySelector(".chip-add").onclick=e=>{ e.stopPropagation(); addToProgression(c.name); flash(chip); };
       grid.appendChild(chip);
     });
@@ -928,7 +965,8 @@ function stepProg(){
   const items=progItems();
   if(progState.idx>=items.length){ if(progState.loop) progState.idx=0; else { stopProg(); return; } }
   const ch=CHORD_BY_NAME[items[progState.idx]];
-  if(ch) playChord(ch);
+  const card=document.querySelector(`#progPanel .prog-item[data-i="${progState.idx}"]`);
+  if(ch) playChord(ch, card);
   highlightProg(progState.idx);
   progState.idx++;
   progState.timer=setTimeout(stepProg, progStepMs());
@@ -994,7 +1032,8 @@ function chordHowTo(c){
 }
 function openChordZoom(c){
   const movable = c.movable? `<div class="tip">Movable shape (${c.movable}): slide the whole shape up the neck and it becomes other chords.</div>`:"";
-  $("#chordModalBody").innerHTML=`<div class="zoom-card">
+  $("#chordModalBody").innerHTML=`<button class="modal-x" id="zoomX" aria-label="Close">✕</button>
+    <div class="zoom-card">
     <div class="zname">${c.name}</div>
     ${renderChord(c,{big:true})}
     <div class="finger-legend"><span><b>1</b> index</span><span><b>2</b> middle</span><span><b>3</b> ring</span><span><b>4</b> little</span><span>○ open</span><span>✕ don’t play</span></div>
@@ -1005,9 +1044,12 @@ function openChordZoom(c){
   </div>`;
   $("#chordModal").classList.add("open");
   $("#chordModalBody").scrollTop=0;
-  $("#zoomPlay").onclick=()=> playChord(c);
-  $("#zoomClose").onclick=()=> $("#chordModal").classList.remove("open");
-  playChord(c); // instant audio feedback on open
+  const card=$("#chordModalBody .zoom-card");
+  const closeZoom=()=> $("#chordModal").classList.remove("open");
+  $("#zoomPlay").onclick=()=> playChord(c, card);
+  $("#zoomClose").onclick=closeZoom;
+  $("#zoomX").onclick=closeZoom;
+  playChord(c, card); // instant audio feedback + strum animation on open
 }
 
 // ---- Scales -------------------------------------------------------------
