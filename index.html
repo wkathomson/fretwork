@@ -186,6 +186,35 @@ nav#tabs button.active{color:var(--accent)}
 .tstr.intune{background:var(--good);border-color:var(--good);color:#fff}
 .tstr.intune small{color:#fff}
 
+/* Songs */
+.song-item{display:flex;align-items:center;gap:10px;width:100%;-webkit-appearance:none;appearance:none;background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:14px;margin-bottom:8px;text-align:left;color:var(--ink)}
+.song-item:active{background:var(--panel2)}
+.song-i-main{flex:1}
+.song-i-title{font-weight:800;font-size:1.02rem}
+.song-i-by{font-size:.78rem;color:var(--ink-dim)}
+.song-i-key{font-weight:800;color:var(--accent);font-size:.9rem}
+.song-del{color:var(--ink-faint);font-size:.85rem;padding:0 6px}
+.song-item .arrow{color:var(--ink-dim)}
+.song-bar{display:flex;align-items:center;gap:12px;margin-bottom:10px}
+.song-meta{line-height:1.2}
+.song-meta small{color:var(--ink-dim)}
+.song-controls{display:flex;flex-wrap:wrap;gap:10px 14px;align-items:center;background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:10px 12px;margin-bottom:14px;position:sticky;top:0;z-index:5;box-shadow:var(--shadow)}
+.ctl-group{display:flex;align-items:center;gap:6px}
+.ctl-group.grow{flex:1;min-width:170px}
+.ctl-lbl{font-size:.76rem;color:var(--ink-dim);font-weight:700}
+.rndbtn{width:34px;height:34px;border-radius:9px;border:1px solid var(--line);background:var(--panel2);color:var(--ink);font-weight:800;font-size:1.05rem}
+.rndbtn.reset{font-size:.85rem}
+.tp-val{font-weight:800;min-width:62px;text-align:center;font-size:.84rem}
+.song-controls .btn{padding:9px 12px;font-size:.85rem}
+.song-chart{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:1rem;line-height:1;padding-bottom:45vh}
+.song-line{margin:0 0 7px}
+.cseg{display:inline-block;vertical-align:bottom}
+.chordlab{display:block;height:1.25em;color:var(--accent);font-weight:800;font-size:.82rem;font-family:"Baloo 2",ui-rounded,sans-serif;white-space:nowrap}
+.chordlab[data-chord]:active{opacity:.5}
+.lyr{white-space:pre}
+.song-section{font-weight:800;color:var(--accent-2);margin:16px 0 6px;font-size:.78rem;text-transform:uppercase;letter-spacing:.08em;font-family:"Baloo 2",ui-rounded,sans-serif}
+.song-blank{height:.7em}
+
 /* Chord zoom modal */
 .zoom-card{display:flex;flex-direction:column;align-items:center;gap:6px}
 .zoom-card svg{width:100%;max-width:300px;height:auto}
@@ -302,6 +331,8 @@ textarea.io{width:100%;min-height:120px;background:var(--bg2);color:var(--ink);b
     <section class="view" id="view-chords"></section>
     <!-- SCALES -->
     <section class="view" id="view-scales"></section>
+    <!-- SONGS -->
+    <section class="view" id="view-songs"></section>
     <!-- CURRICULUM -->
     <section class="view" id="view-learn"></section>
     <!-- LESSON READER -->
@@ -314,6 +345,7 @@ textarea.io{width:100%;min-height:120px;background:var(--bg2);color:var(--ink);b
     <button data-tab="start" class="active"><span class="ico">📖</span>Start</button>
     <button data-tab="chords"><span class="ico">🎸</span>Chords</button>
     <button data-tab="scales"><span class="ico">🎼</span>Scales</button>
+    <button data-tab="songs"><span class="ico">🎵</span>Songs</button>
     <button data-tab="learn"><span class="ico">🎓</span>Learn</button>
     <button data-tab="tools"><span class="ico">🥁</span>Tools</button>
   </nav>
@@ -364,7 +396,7 @@ textarea.io{width:100%;min-height:120px;background:var(--bg2);color:var(--ink);b
  * 0.  Persistence
  * ============================================================= */
 const STORE_KEY = "fretwork.v1";
-const DEFAULT_STATE = { completed:{}, progression:[], practice:{dates:{},streak:0,best:0}, settings:{ volume:0.8, bpm:80, sig:4 } };
+const DEFAULT_STATE = { completed:{}, progression:[], songs:[], practice:{dates:{},streak:0,best:0}, settings:{ volume:0.8, bpm:80, sig:4 } };
 function loadState(){
   try{ const r = JSON.parse(localStorage.getItem(STORE_KEY)); if(r&&typeof r==="object")
     return Object.assign({}, DEFAULT_STATE, r, {settings:Object.assign({},DEFAULT_STATE.settings,r.settings)});
@@ -1350,6 +1382,200 @@ function answerEar(q){
   setTimeout(()=>{ nextEarQ(); renderEarTrainer(); playChord(CHORD_BY_NAME[earT.current.name]); }, 1300);
 }
 
+/* =============================================================
+ *  Song library (public-domain songs + ChordPro import)
+ * ============================================================= */
+const SONGS=[
+ { id:"amazing-grace", title:"Amazing Grace", by:"Traditional (John Newton)", key:"G", capo:0,
+   note:"A gentle 3/4 hymn – perfect for slow, clean G–C–D changes.",
+   body:`#Verse
+[G]Amazing [G7]grace, how [C]sweet the [G]sound
+That [G]saved a [Em]wretch like [D]me
+[G]I [G7]once was [C]lost, but [G]now am [Em]found
+Was [G]blind, but [D]now I [G]see` },
+ { id:"rising-sun", title:"House of the Rising Sun", by:"Traditional", key:"Am", capo:0,
+   note:"A moody 6/8 folk ballad that rolls through five chords – great changes practice.",
+   body:`#Verse
+[Am]There is a [C]house in [D]New Or-[F]leans
+[Am]They call the [C]Rising [E]Sun
+[Am]And it's [C]been the [D]ruin of [F]many a poor [Am]boy
+And [E]God, I know I'm [Am]one` },
+ { id:"scarborough", title:"Scarborough Fair", by:"Traditional", key:"Em", capo:0,
+   note:"A haunting modal folk tune in E minor.",
+   body:`#Verse
+[Em]Are you going to [G]Scarborough [Em]Fair?
+[Em]Parsley, [D]sage, rosemary and [Em]thyme
+[Em]Remember [G]me to one who [D]lives there
+[D]She once was a [Em]true love of [Em]mine` },
+ { id:"auld-lang", title:"Auld Lang Syne", by:"Traditional (Robert Burns)", key:"G", capo:0,
+   note:"The New Year classic – three easy chords.",
+   body:`#Verse
+Should [G]old ac-[D]quaintance [G]be for-[C]got
+And [G]never [C]brought to [D]mind?
+Should [G]old ac-[D]quaintance [G]be for-[C]got
+And [G]days of [D]auld lang [G]syne` },
+ { id:"oh-susanna", title:"Oh! Susanna", by:"Stephen Foster (public domain)", key:"G", capo:0,
+   note:"A bouncy singalong using G, C and D7.",
+   body:`#Verse
+[G]I come from Alabama with my [D7]banjo on my [G]knee
+I'm going to Louisiana, my [D7]true love for to [G]see
+#Chorus
+Oh [C]Susanna, [G]don't you cry for [D7]me
+For I [G]come from [C]Alabama with my [G]banjo [D7]on my [G]knee` },
+];
+function getSong(id){ return SONGS.find(s=>s.id===id) || (STATE.songs||[]).find(s=>s.id===id); }
+let songState={ current:null, transpose:0, scrolling:false, speed:2, raf:null };
+
+const PCS=["C","C#","D","D#","E","F","F#","G","G#","A","A#","B"];
+const FLAT2SHARP={ "Db":"C#","Eb":"D#","Gb":"F#","Ab":"G#","Bb":"A#" };
+function transposeChord(name,n){
+  if(!n) return name;
+  return name.replace(/([A-G][#b]?)/g, root=>{
+    let key = FLAT2SHARP[root] || root;
+    const pc=PCS.indexOf(key);
+    if(pc<0) return root;
+    return PCS[((pc+n)%12+12)%12];
+  });
+}
+function parseChordLine(line){
+  const parts=line.split(/(\[[^\]]+\])/), segs=[]; let chord="";
+  parts.forEach(p=>{
+    if(!p) return;
+    if(p[0]==="[" && p[p.length-1]==="]") chord=p.slice(1,-1);
+    else { segs.push({chord, text:p}); chord=""; }
+  });
+  if(chord) segs.push({chord, text:""});
+  return segs;
+}
+function escapeHtml(s){ return s.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;"); }
+function renderSongLine(line){
+  if(line.startsWith("#")) return `<div class="song-section">${escapeHtml(line.slice(1).trim())}</div>`;
+  if(line.trim()==="") return `<div class="song-blank"></div>`;
+  const segs=parseChordLine(line);
+  return `<div class="song-line">`+ segs.map(s=>{
+    const ch = s.chord? transposeChord(s.chord, songState.transpose) : "";
+    return `<span class="cseg"><span class="chordlab"${ch?` data-chord="${ch}"`:""}>${ch}</span><span class="lyr">${escapeHtml(s.text)||"&nbsp;"}</span></span>`;
+  }).join("")+`</div>`;
+}
+// chord name → a simple voicing, for tap-to-hear when no diagram exists
+function chordTones(name){
+  const m=name.match(/^([A-G][#b]?)(.*)$/); if(!m) return null;
+  let key=FLAT2SHARP[m[1]]||m[1]; const pc=PCS.indexOf(key); if(pc<0) return null;
+  const q=m[2]; let iv;
+  if(/dim/.test(q)) iv=[0,3,6];
+  else if(/aug|\+/.test(q)) iv=[0,4,8];
+  else if(/sus2/.test(q)) iv=[0,2,7];
+  else if(/sus4|sus/.test(q)) iv=[0,5,7];
+  else if(/^m(?!aj)/.test(q)) iv=[0,3,7];
+  else iv=[0,4,7];
+  if(/maj7|M7/.test(q)) iv=iv.concat(11);
+  else if(/m7|min7/.test(q)) iv=[0,3,7,10];
+  else if(/7/.test(q)) iv=iv.concat(10);
+  if(/add9/.test(q)) iv=iv.concat(14);
+  if(/6/.test(q) && !/7/.test(q)) iv=iv.concat(9);
+  const base=48+pc;
+  return iv.map(i=>base+i);
+}
+function tapSongChord(name){
+  const c=CHORD_BY_NAME[name];
+  if(c) openChordZoom(c);
+  else { const tones=chordTones(name); if(tones){ let t=0; tones.forEach(mm=>{ pluck(midiToFreq(mm),1.4,t,0.9); t+=0.04; }); } toast(name); }
+}
+function songScrollStart(){
+  songState.scrolling=true;
+  const tick=()=>{
+    if(!songState.scrolling) return;
+    const main=$("#main");
+    main.scrollTop += songState.speed*0.4;
+    if(main.scrollTop+main.clientHeight >= main.scrollHeight-1){ songScrollStop(); return; }
+    songState.raf=requestAnimationFrame(tick);
+  };
+  songState.raf=requestAnimationFrame(tick);
+  const b=document.getElementById("scrollBtn"); if(b) b.textContent="⏸ Pause";
+}
+function songScrollStop(){
+  songState.scrolling=false;
+  if(songState.raf) cancelAnimationFrame(songState.raf);
+  const b=document.getElementById("scrollBtn"); if(b) b.textContent="▶ Auto-scroll";
+}
+function renderSongs(){
+  const v=$("#view-songs"); v.innerHTML="";
+  if(songState.current){ renderSongDetail(v, getSong(songState.current)); return; }
+  songScrollStop();
+  v.appendChild(el("p","section-intro","Play real songs – chords sit above the words. Tap any chord to hear it, transpose to suit your voice, and switch on auto-scroll to keep your place."));
+  v.appendChild(el("div","tip","Built-in songs are traditional / public-domain. Add your own with Import below (paste chords as <b>[G]like [C]this</b>)."));
+
+  const userSongs=STATE.songs||[];
+  const mk=(s,user)=>{
+    const card=el("button","song-item");
+    card.innerHTML=`<div class="song-i-main"><div class="song-i-title">${s.title}</div><div class="song-i-by">${s.by||"Your import"}</div></div>
+      <div class="song-i-key">${s.key||""}</div>${user?'<span class="song-del" data-del="'+s.id+'">✕</span>':""}<span class="arrow">›</span>`;
+    card.onclick=()=>{ songState.current=s.id; songState.transpose=0; renderSongs(); };
+    return card;
+  };
+  if(userSongs.length){ v.appendChild(el("div","group-title","Your songs")); userSongs.forEach(s=>{ const c=mk(s,true); v.appendChild(c); c.querySelector("[data-del]").onclick=e=>{ e.stopPropagation(); STATE.songs=STATE.songs.filter(x=>x.id!==s.id); saveState(); renderSongs(); }; }); }
+  v.appendChild(el("div","group-title","Songbook"));
+  SONGS.forEach(s=> v.appendChild(mk(s,false)));
+
+  const imp=el("button","btn ghost block","＋ Import a song");
+  imp.style.marginTop="14px";
+  imp.onclick=openImportSong;
+  v.appendChild(imp);
+}
+function renderSongDetail(v, song){
+  if(!song){ songState.current=null; renderSongs(); return; }
+  const tp = songState.transpose;
+  const key = tp? transposeChord(song.key||"", tp) : (song.key||"");
+  const bar=el("div","song-bar");
+  bar.innerHTML=`<button class="back" id="songBack">‹ Songs</button><div class="song-meta"><b>${song.title}</b><br><small>${song.by||""}</small></div>`;
+  v.appendChild(bar);
+
+  const ctr=el("div","song-controls");
+  ctr.innerHTML=`
+    <div class="ctl-group"><span class="ctl-lbl">Transpose</span>
+      <button class="rndbtn" id="tpDown">−</button>
+      <span class="tp-val">${tp>0?"+"+tp:tp}${key?" · "+key:""}</span>
+      <button class="rndbtn" id="tpUp">+</button>
+      ${tp?'<button class="rndbtn reset" id="tpReset">↺</button>':""}
+    </div>
+    ${song.capo?`<div class="ctl-group"><span class="ctl-lbl">Capo ${song.capo}</span></div>`:""}
+    <div class="ctl-group grow"><button class="btn" id="scrollBtn">▶ Auto-scroll</button>
+      <input type="range" id="scrollSpeed" class="slider" min="1" max="6" value="${songState.speed}" style="flex:1">
+    </div>`;
+  v.appendChild(ctr);
+
+  const chart=el("div","song-chart");
+  chart.innerHTML=song.body.split("\n").map(renderSongLine).join("");
+  v.appendChild(chart);
+  v.appendChild(el("div","hint","Tap a chord name to hear it (and see the shape).  ·  Songs are for practice; lyrics shown are traditional/public-domain."));
+
+  chart.querySelectorAll("[data-chord]").forEach(el2=> el2.onclick=()=> tapSongChord(el2.dataset.chord));
+  $("#songBack").onclick=()=>{ songScrollStop(); songState.current=null; renderSongs(); };
+  $("#tpDown").onclick=()=>{ songState.transpose--; renderSongs(); };
+  $("#tpUp").onclick=()=>{ songState.transpose++; renderSongs(); };
+  const r=$("#tpReset"); if(r) r.onclick=()=>{ songState.transpose=0; renderSongs(); };
+  $("#scrollBtn").onclick=()=>{ songState.scrolling? songScrollStop() : songScrollStart(); };
+  $("#scrollSpeed").oninput=e=>{ songState.speed=+e.target.value; };
+}
+function openImportSong(){
+  $("#chordModalBody").innerHTML=`<button class="modal-x" id="impX">✕</button>
+    <h3>Import a song</h3>
+    <p class="hint">Paste chords above the words using square brackets, e.g. <b>[G]Twinkle [C]twinkle</b>. Start a section with <b>#Chorus</b>.</p>
+    <div class="field"><label>Title</label><input id="impTitle" class="io" style="min-height:0;height:42px" placeholder="Song title"></div>
+    <div class="field"><label>Chords &amp; lyrics</label><textarea id="impBody" class="io" placeholder="#Verse&#10;[G]Amazing [G7]grace how [C]sweet the [G]sound"></textarea></div>
+    <button class="btn block" id="impSave">Add to my songs</button>`;
+  $("#chordModal").classList.add("open");
+  const close=()=> $("#chordModal").classList.remove("open");
+  $("#impX").onclick=close;
+  $("#impSave").onclick=()=>{
+    const title=$("#impTitle").value.trim(), body=$("#impBody").value.trim();
+    if(!title||!body){ toast("Add a title and some lyrics"); return; }
+    if(!STATE.songs) STATE.songs=[];
+    STATE.songs.push({ id:"u"+Date.now(), title, by:"Your import", key:"", capo:0, body });
+    saveState(); close(); renderSongs(); toast("Song added");
+  };
+}
+
 /* ---- Live tuner (microphone + autocorrelation pitch detection) -------- */
 const tuner={running:false,stream:null,analyser:null,buf:null,raf:null,last:0,error:null,smooth:0};
 function autoCorrelate(buf, sampleRate){
@@ -1639,11 +1865,12 @@ function toggleComplete(id){
 /* =============================================================
  * 8.  Navigation
  * ============================================================= */
-const VIEW_IDS={start:"view-start",chords:"view-chords",scales:"view-scales",learn:"view-learn",tools:"view-tools"};
-const RENDERERS={start:renderStart,chords:renderChords,scales:renderScales,learn:renderLearn,tools:renderTools};
+const VIEW_IDS={start:"view-start",chords:"view-chords",scales:"view-scales",songs:"view-songs",learn:"view-learn",tools:"view-tools"};
+const RENDERERS={start:renderStart,chords:renderChords,scales:renderScales,songs:renderSongs,learn:renderLearn,tools:renderTools};
 let activeTab="start";
 function switchTab(tab){
   if(activeTab==="tools" && tab!=="tools" && typeof tunerStop==="function") tunerStop(); // release mic
+  if(typeof songScrollStop==="function") songScrollStop();
   activeTab=tab;
   document.querySelectorAll(".view").forEach(v=>v.classList.remove("active"));
   $("#"+VIEW_IDS[tab]).classList.add("active");
