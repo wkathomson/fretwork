@@ -111,6 +111,11 @@ nav#tabs button.active{color:var(--accent)}
 .chord-group-head .cg-chev{color:var(--ink-dim);transition:transform .2s;font-size:.8rem}
 .chord-group-head.open{margin-bottom:8px}
 .chord-group-head.open .cg-chev{transform:rotate(90deg)}
+.mv-name{font-family:"Baloo 2",ui-rounded,sans-serif;font-weight:800;font-size:2.8rem;text-align:center;color:var(--accent);line-height:1;margin:10px 0 2px}
+.mv-name span{display:block;font-size:.78rem;color:var(--ink-dim);font-weight:700;margin-top:4px}
+.mv-diagram{display:flex;justify-content:center}
+.mv-diagram svg{max-width:230px}
+.mv-slide{display:flex;align-items:center;gap:12px;margin:12px 0}
 .hint{font-size:.86rem;color:var(--ink-dim)}
 .tip{background:rgba(127,183,164,.1);border-left:3px solid var(--accent-2);border-radius:8px;padding:10px 12px;margin:0 0 12px;font-size:.92rem}
 .btn{background:var(--wood);color:#1a1109;border:0;border-radius:12px;padding:12px 16px;font-weight:700;font-size:.95rem}
@@ -924,7 +929,8 @@ const CURRICULUM = [
    {id:"m11l1", title:"E-shape barre chords", blocks:[
      {p:"The full F you just learned is really an E-major shape with a barre behind it. Because nothing is played open, the <b>whole shape is movable</b>: slide it up so the barre sits at the 3rd fret and you have G; at the 5th fret, A. The root note is on the 6th string, so wherever your barre finger’s root lands names the chord. Make it minor by lifting the one finger that turns E into Em."},
      {chords:["F (E-shape)","Fm (E-shape)"]},
-     {p:"Learning the note names along the 6th string therefore unlocks every major and minor chord from a single pair of shapes. That’s the great efficiency of barre chords."}
+     {p:"Learning the note names along the 6th string therefore unlocks every major and minor chord from a single pair of shapes. That’s the great efficiency of barre chords."},
+     {tip:"See it in action: open the <b>Chords</b> tab and tap “↕ Movable shapes – use the whole neck” to slide a shape up the fretboard and watch the chord name change."}
    ]},
    {id:"m11l2", title:"A-shape barre chords", blocks:[
      {p:"The second essential barre is built from the A-major shape, with the root on the <b>5th string</b>. Barre at the 1st fret for B♭, and slide it up the neck from there. Pairing the E-shape (root on the 6th string) with the A-shape (root on the 5th string) lets you play any chord in two convenient places on the neck."},
@@ -1018,6 +1024,55 @@ function renderStart(){
 
 // ---- Chords -------------------------------------------------------------
 let currentChordFilter="all";
+/* ---- Movable shapes explorer (CAGED-style) ---------------------------- */
+const SHAPES={
+  "E-shape major":{rel:[0,2,2,1,0,0], fOpen:[0,2,3,1,0,0], fBarre:[1,3,4,2,1,1], rootMidi:40, minor:false, maxF:9},
+  "E-shape minor":{rel:[0,2,2,0,0,0], fOpen:[0,2,3,0,0,0], fBarre:[1,3,4,1,1,1], rootMidi:40, minor:true,  maxF:9},
+  "A-shape major":{rel:["x",0,2,2,2,0], fOpen:[0,0,1,2,3,0], fBarre:[0,1,2,3,4,1], rootMidi:45, minor:false, maxF:7},
+  "A-shape minor":{rel:["x",0,2,2,1,0], fOpen:[0,0,2,3,1,0], fBarre:[0,1,3,4,2,1], rootMidi:45, minor:true,  maxF:7},
+};
+function shapeChord(key,F){
+  const s=SHAPES[key];
+  const frets=s.rel.map(r=> r==="x"?"x": r+F);
+  const fingers = F===0? s.fOpen : s.fBarre;
+  const name=NOTE_NAMES[(s.rootMidi+F)%12]+(s.minor?"m":"");
+  return {name, frets, fingers};
+}
+let mvState={shape:"E-shape major", fret:1};
+function buildMovableExplorer(){
+  const card=el("div","card mv-card");
+  card.innerHTML=`
+    <p class="hint">A barre chord is just an open-chord shape with no open strings – so the <b>whole shape slides up the neck</b>. The fingering never changes; only the chord does. Learn a couple of shapes and you can play all over the fretboard (the heart of the “CAGED” idea).</p>
+    <div class="pill-row" id="mvShapes"></div>
+    <div class="mv-name" id="mvName"></div>
+    <div class="mv-diagram" id="mvDia"></div>
+    <div class="mv-slide"><button class="rndbtn" id="mvDown">−</button>
+      <input type="range" id="mvFret" min="0" max="9" class="slider" style="flex:1">
+      <button class="rndbtn" id="mvUp">+</button></div>
+    <button class="btn block" id="mvPlay"></button>
+    <p class="hint" id="mvHint" style="margin-top:10px"></p>`;
+  const update=()=>{
+    const s=SHAPES[mvState.shape];
+    if(mvState.fret>s.maxF) mvState.fret=s.maxF;
+    const ch=shapeChord(mvState.shape, mvState.fret);
+    card.querySelector("#mvName").innerHTML=`${ch.name}<span>${mvState.fret===0?"open position":"barre at fret "+mvState.fret}</span>`;
+    card.querySelector("#mvDia").innerHTML=renderChord(ch,{big:true});
+    card.querySelector("#mvPlay").textContent="▶ Hear "+ch.name;
+    const rootStr = s.rootMidi===40 ? "6th (thickest)" : "5th";
+    card.querySelector("#mvHint").innerHTML=`The root sits on the <b>${rootStr} string</b> – whatever note it lands on names the chord. ${mvState.fret===0?"At the very bottom it’s the open chord you already know.":""}`;
+    const fr=card.querySelector("#mvFret"); fr.max=s.maxF; if(+fr.value!==mvState.fret) fr.value=mvState.fret;
+    card.querySelectorAll("[data-shape]").forEach(b=> b.classList.toggle("active", b.dataset.shape===mvState.shape));
+  };
+  card.querySelector("#mvShapes").innerHTML=Object.keys(SHAPES).map(k=>`<button class="pill" data-shape="${k}">${k}</button>`).join("");
+  card.querySelectorAll("[data-shape]").forEach(b=> b.onclick=()=>{ mvState.shape=b.dataset.shape; update(); });
+  card.querySelector("#mvFret").oninput=e=>{ mvState.fret=+e.target.value; update(); };
+  card.querySelector("#mvDown").onclick=()=>{ if(mvState.fret>0){ mvState.fret--; update(); } };
+  card.querySelector("#mvUp").onclick=()=>{ const mx=SHAPES[mvState.shape].maxF; if(mvState.fret<mx){ mvState.fret++; update(); } };
+  card.querySelector("#mvPlay").onclick=()=> playChord(shapeChord(mvState.shape,mvState.fret), card.querySelector("#mvDia"));
+  update();
+  return card;
+}
+
 let chordOpen={};
 function renderChords(){
   const v=$("#view-chords");
@@ -1026,6 +1081,14 @@ function renderChords(){
 
   // progression focus panel (built/refreshed by renderProgPanel)
   const panel=el("div","prog-panel"); panel.id="progPanel"; v.appendChild(panel);
+
+  // movable shapes explorer (collapsible)
+  const mvOpen = chordOpen["__movable"]===true;
+  const mvHead=el("button","chord-group-head"+(mvOpen?" open":""));
+  mvHead.innerHTML=`<span class="cg-title">↕ Movable shapes – use the whole neck</span><span class="cg-chev">▶</span>`;
+  mvHead.onclick=()=>{ chordOpen["__movable"]=!mvOpen; renderChords(); if(!mvOpen) $("#main").scrollTop=mvHead.offsetTop-8; };
+  v.appendChild(mvHead);
+  if(mvOpen) v.appendChild(buildMovableExplorer());
 
   const groups=[...new Set(CHORDS.map(c=>c.group))];
   groups.forEach((g,gi)=>{
