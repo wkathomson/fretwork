@@ -930,7 +930,7 @@ const CURRICULUM = [
      {p:"The full F you just learned is really an E-major shape with a barre behind it. Because nothing is played open, the <b>whole shape is movable</b>: slide it up so the barre sits at the 3rd fret and you have G; at the 5th fret, A. The root note is on the 6th string, so wherever your barre finger’s root lands names the chord. Make it minor by lifting the one finger that turns E into Em."},
      {chords:["F (E-shape)","Fm (E-shape)"]},
      {p:"Learning the note names along the 6th string therefore unlocks every major and minor chord from a single pair of shapes. That’s the great efficiency of barre chords."},
-     {tip:"See it in action: open the <b>Chords</b> tab and tap “↕ Movable shapes – use the whole neck” to slide a shape up the fretboard and watch the chord name change."}
+     {tip:"The flip side of barre chords: some grips move up the neck with <b>no barre at all</b>. Open the <b>Chords</b> tab and tap “↕ Movable shapes (no barre)” to slide the D and A shapes up and watch the chord change."}
    ]},
    {id:"m11l2", title:"A-shape barre chords", blocks:[
      {p:"The second essential barre is built from the A-major shape, with the root on the <b>5th string</b>. Barre at the 1st fret for B♭, and slide it up the neck from there. Pairing the E-shape (root on the 6th string) with the A-shape (root on the 5th string) lets you play any chord in two convenient places on the neck."},
@@ -1024,25 +1024,29 @@ function renderStart(){
 
 // ---- Chords -------------------------------------------------------------
 let currentChordFilter="all";
-/* ---- Movable shapes explorer (CAGED-style) ---------------------------- */
+/* ---- Movable shapes explorer (no-barre, 3-string grips) ---------------- */
+// rel = relative frets low→high ("x"=mute). rootStr = string index whose note names the chord.
+// These shapes have their open strings on the outer edges, so you mute those and
+// slide the little grip up the neck with no barre at all.
 const SHAPES={
-  "E-shape major":{rel:[0,2,2,1,0,0], fOpen:[0,2,3,1,0,0], fBarre:[1,3,4,2,1,1], rootMidi:40, minor:false, maxF:9},
-  "E-shape minor":{rel:[0,2,2,0,0,0], fOpen:[0,2,3,0,0,0], fBarre:[1,3,4,1,1,1], rootMidi:40, minor:true,  maxF:9},
-  "A-shape major":{rel:["x",0,2,2,2,0], fOpen:[0,0,1,2,3,0], fBarre:[0,1,2,3,4,1], rootMidi:45, minor:false, maxF:7},
-  "A-shape minor":{rel:["x",0,2,2,1,0], fOpen:[0,0,2,3,1,0], fBarre:[0,1,3,4,2,1], rootMidi:45, minor:true,  maxF:7},
+  "D shape (major)":{rel:["x","x","x",2,3,2], fingers:[0,0,0,1,3,2], rootStr:4, minor:false, maxF:9},
+  "D shape (minor)":{rel:["x","x","x",2,3,1], fingers:[0,0,0,2,3,1], rootStr:4, minor:true,  maxF:9},
+  "A shape (major)":{rel:["x","x",2,2,2,"x"], fingers:[0,0,1,2,3,0], rootStr:3, minor:false, maxF:9},
+  "A shape (minor)":{rel:["x","x",2,2,1,"x"], fingers:[0,0,2,3,1,0], rootStr:3, minor:true,  maxF:9},
 };
+const STR_ORD=["6th","5th","4th","3rd","2nd","1st"];
 function shapeChord(key,F){
   const s=SHAPES[key];
   const frets=s.rel.map(r=> r==="x"?"x": r+F);
-  const fingers = F===0? s.fOpen : s.fBarre;
-  const name=NOTE_NAMES[(s.rootMidi+F)%12]+(s.minor?"m":"");
-  return {name, frets, fingers};
+  const rootPc=(OPEN_MIDI[s.rootStr]+s.rel[s.rootStr]+F)%12;
+  const name=NOTE_NAMES[rootPc]+(s.minor?"m":"");
+  return {name, frets, fingers:s.fingers};
 }
-let mvState={shape:"E-shape major", fret:1};
+let mvState={shape:"D shape (major)", fret:2};
 function buildMovableExplorer(){
   const card=el("div","card mv-card");
   card.innerHTML=`
-    <p class="hint">A barre chord is just an open-chord shape with no open strings – so the <b>whole shape slides up the neck</b>. The fingering never changes; only the chord does. Learn a couple of shapes and you can play all over the fretboard (the heart of the “CAGED” idea).</p>
+    <p class="hint">Some shapes slide up the neck with <b>no barre at all</b> – you just mute the strings that were open and play the little 3-string grip. The fingering never changes; only the chord does. The <b>D</b> and <b>A</b> shapes work because their open strings sit on the outer edges (easy to mute). The C, G and E shapes have open strings trapped in the middle, so those really do need a barre.</p>
     <div class="pill-row" id="mvShapes"></div>
     <div class="mv-name" id="mvName"></div>
     <div class="mv-diagram" id="mvDia"></div>
@@ -1055,11 +1059,10 @@ function buildMovableExplorer(){
     const s=SHAPES[mvState.shape];
     if(mvState.fret>s.maxF) mvState.fret=s.maxF;
     const ch=shapeChord(mvState.shape, mvState.fret);
-    card.querySelector("#mvName").innerHTML=`${ch.name}<span>${mvState.fret===0?"open position":"barre at fret "+mvState.fret}</span>`;
+    card.querySelector("#mvName").innerHTML=`${ch.name}<span>${mvState.fret===0?"open position":"slid up "+mvState.fret+" fret"+(mvState.fret>1?"s":"")}</span>`;
     card.querySelector("#mvDia").innerHTML=renderChord(ch,{big:true});
     card.querySelector("#mvPlay").textContent="▶ Hear "+ch.name;
-    const rootStr = s.rootMidi===40 ? "6th (thickest)" : "5th";
-    card.querySelector("#mvHint").innerHTML=`The root sits on the <b>${rootStr} string</b> – whatever note it lands on names the chord. ${mvState.fret===0?"At the very bottom it’s the open chord you already know.":""}`;
+    card.querySelector("#mvHint").innerHTML=`Play only the marked strings (✕ = mute). The root is on the <b>${STR_ORD[s.rootStr]} string</b> – whatever note it lands on names the chord. ${mvState.fret===0?"Right at the bottom it’s the open "+ch.name+" you already know.":""}`;
     const fr=card.querySelector("#mvFret"); fr.max=s.maxF; if(+fr.value!==mvState.fret) fr.value=mvState.fret;
     card.querySelectorAll("[data-shape]").forEach(b=> b.classList.toggle("active", b.dataset.shape===mvState.shape));
   };
@@ -1085,7 +1088,7 @@ function renderChords(){
   // movable shapes explorer (collapsible)
   const mvOpen = chordOpen["__movable"]===true;
   const mvHead=el("button","chord-group-head"+(mvOpen?" open":""));
-  mvHead.innerHTML=`<span class="cg-title">↕ Movable shapes – use the whole neck</span><span class="cg-chev">▶</span>`;
+  mvHead.innerHTML=`<span class="cg-title">↕ Movable shapes (no barre)</span><span class="cg-chev">▶</span>`;
   mvHead.onclick=()=>{ chordOpen["__movable"]=!mvOpen; renderChords(); if(!mvOpen) $("#main").scrollTop=mvHead.offsetTop-8; };
   v.appendChild(mvHead);
   if(mvOpen) v.appendChild(buildMovableExplorer());
